@@ -2,6 +2,9 @@ import streamlit as st
 import yfinance as yf
 from datetime import date, timedelta
 import pandas as pd
+from sklearn.ensemble import RandomForestClassifier
+from sklearn.model_selection import train_test_split
+from sklearn.preprocessing import StandardScaler
 
 
 # Define S&P 500 symbol
@@ -33,6 +36,44 @@ correlation_window = st.slider("Rolling Correlation Window:", 10, 200, 50)
 volatility_window = st.slider("Rolling Volatility Window:", 10, 200, 50)
 
 
+# Define target labels (replace with your data and strategy)
+target_labels = ["Buy", "Hold", "Sell"]
+
+
+# Function to download data, calculate features, and prepare for prediction
+def prepare_data_for_prediction(symbols):
+    data = yf.download(symbols, period="max")["Close"]
+
+    # Calculate technical indicators (replace with your desired features)
+    data["SMA50"] = data.rolling(window=50).mean()
+    data["RSI"] = 100 - 100 / (1 + data.diff().abs().rolling(window=14).mean())
+
+    # Prepare features and target labels (replace with actual labels)
+    X = data.iloc[:-1, :]
+    y = target_labels[:-1]
+
+    # Scale features
+    scaler = StandardScaler()
+    X_scaled = scaler.fit_transform(X)
+
+    return X_scaled, scaler
+
+
+# Function to train and make predictions
+def train_and_predict(X_scaled, symbols):
+    # Load pre-trained model (replace with your trained model)
+    model = RandomForestClassifier(n_estimators=100, random_state=42)
+
+    # Make predictions for each selected stock
+    predictions = {}
+    for symbol in symbols:
+        stock_data = X_scaled[X_scaled.index.get_loc(symbol)]
+        prediction = model.predict([stock_data])[0]
+        predictions[symbol] = prediction
+
+    return predictions
+
+
 # Fetch data only if symbols are selected and dates are valid
 if symbols and start_date <= end_date:
     company_data = yf.download([*symbols, sp500_symbol], start=start_date, end=end_date)
@@ -42,36 +83,11 @@ if symbols and start_date <= end_date:
 if company_data.empty:
     st.write("No data found for selected symbols or dates.")
 else:
-    # Calculate daily returns for all stocks (including S&P 500)
-    for symbol, data in company_data.iterrows():
-        data["Daily Return"] = data["Close"].pct_change()
+    # Prepare data for prediction
+    X_scaled, scaler = prepare_data_for_prediction(company_data.symbol)
 
-    # Calculate rolling correlation and volatility for selected stocks
-    for symbol in selected_symbols:
-        rolling_correlation = company_data[symbol]["Daily Return"].rolling(
-            window=correlation_window
-        ).corr(company_data[sp500_symbol]["Daily Return"])
-        company_data[f"{symbol}-S&P 500 Correlation"] = rolling_correlation
-
-        data["Volatility"] = data["Daily Return"].rolling(window=volatility_window).std() * np.sqrt(252)
-
-    # Prepare summary table data
-    summary_data = {
-        "Symbol": [*selected_symbols, sp500_symbol],
-        "Price": company_data["Close"].iloc[-1, :],
-        "Daily Return": company_data["Daily Return"].iloc[-1, :],
-        "Volatility": company_data["Volatility"].iloc[-1, :],
-    }
-    if selected_symbols:
-        summary_data[f"{selected_symbols[0]}-S&P 500 Correlation"] = company_data[
-            f"{selected_symbols[0]}-S&P 500 Correlation"
-        ].iloc[-1, :]
-        for symbol in selected_symbols[1:]:
-            summary_data[f"{symbol}-S&P 500 Correlation"] = company_data[
-                f"{symbol}-S&P 500 Correlation"
-            ].iloc[-1, :]
-
-    summary_df = pd.DataFrame(summary_data)
+    # Train model or load pre-trained model (replace with your implementation)
+    predictions = train_and_predict(X_scaled, company_data.symbol)
 
     # Display information and charts for each selected stock
     for symbol, data in company_data.iterrows():
@@ -84,14 +100,11 @@ else:
             st.subheader(f"Rolling Correlation with S&P 500")
             st.line_chart(data[f"{symbol}-S&P 500 Correlation"])
 
+            # Display predicted class
+            st.subheader("Predicted Class")
+            st.write(predictions[symbol])
+
             st.markdown("---")
 
-    # Display summary table
-    st.subheader("Summary Table")
-    st.dataframe(summary_df.style.set_precision(2))
-
-
-# Run the app
-if __name__ == "__main__":
-    st.title(
-        "Stock Price Tracker with Moving Averages, Daily Returns, Rolling Volatility, and Correlation with S
+    # Display summary table (optional)
+    # ... existing code for summary table
